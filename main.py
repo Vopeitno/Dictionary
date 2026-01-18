@@ -1,9 +1,9 @@
 import tkinter as tk
-from tkinter import ttk
-
-from storage import load_vocab, save_vocab
 from ui_app import MainApp
+from storage import load_vocab, save_vocab
 from words_seed import SEED_WORDS
+
+import sv_ttk
 
 
 def ensure_seed():
@@ -15,14 +15,11 @@ def ensure_seed():
 
 def main():
     ensure_seed()
+
     root = tk.Tk()
     root.geometry("1920x1080")
 
-    style = ttk.Style(root)
-    try:
-        style.theme_use("clam")
-    except Exception:
-        pass
+    sv_ttk.set_theme("dark")  
 
     MainApp(root)
     root.mainloop()
