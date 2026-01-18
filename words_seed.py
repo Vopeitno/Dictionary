@@ -42,7 +42,7 @@ SEED_WORDS = [
     {"topic": "Simple words", "en": "serving", "ru": "приносить (в еде), порция"},
     {"topic": "Simple words", "en": "reason", "ru": "причина"},
     {"topic": "Simple words", "en": "fault", "ru": "вина"},
-    {"topic": "Simple words", "en": "ain’t", "ru": "не"},
+    {"topic": "Simple words", "en": "ain't", "ru": "не"},
     {"topic": "Simple words", "en": "appear", "ru": "появляться"},
     {"topic": "Simple words", "en": "sign it", "ru": "подписать"},
     {"topic": "Simple words", "en": "vote", "ru": "голосовать"},
