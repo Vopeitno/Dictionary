@@ -8,6 +8,15 @@ from storage import load_vocab, save_vocab
 from grammar_online import TENSES, check_sentence, lt_online
 
 
+# --- Visual palette (dark + Binance-like accent) ---
+COL_TEXT = "#E6EDF3"          # pleasant white
+COL_MUTED = "#9AA4B2"
+COL_ACCENT = "#F0B90B"        # Binance-like yellow accent
+COL_INPUT_BG = "#141A23"      # input area background (distinct from theme)
+COL_INPUT_BG_FOCUS = "#182231"
+COL_SELECT_BG = "#2A3A52"
+
+
 def _norm(s: str) -> str:
     s = str(s).strip().lower()
     s = s.replace("ё", "е")
@@ -61,7 +70,7 @@ class MainApp(ttk.Frame):
     def __init__(self, master: tk.Tk):
         super().__init__(master)
         self.master = master
-        self.pack(fill="both", expand=True, padx=18, pady=18)
+        self.pack(fill="both", expand=True, padx=24, pady=24)
 
         self.items = load_vocab()
         for it in self.items:
@@ -78,24 +87,54 @@ class MainApp(ttk.Frame):
 
     def _build_styles(self):
         style = ttk.Style(self.master)
-        style.configure("Big.TLabel", font=("Helvetica", 18))
-        style.configure("Big.TButton", font=("Helvetica", 16))
-        style.configure("Big.TLabelframe.Label", font=("Helvetica", 16))
+
+        # global font (applies to many widgets)
+        self.master.option_add("*Font", ("Segoe UI", 21))
+
+        style.configure("Big.TLabel", font=("Segoe UI", 16), foreground=COL_TEXT)
+        style.configure("Sub.TLabel", font=("Segoe UI", 11), foreground=COL_MUTED)
+
+        style.configure("Big.TButton", font=("Segoe UI", 13))
+        style.configure("Big.TLabelframe.Label", font=("Segoe UI", 13), foreground=COL_TEXT)
+
+        # Card-like frame
+        style.configure("Card.TLabelframe", padding=14)
+        style.configure("Card.TLabelframe.Label", font=("Segoe UI", 13), foreground=COL_TEXT)
+
+        # Entry that stands out from dark theme
+        # Note: ttk.Entry coloring may vary by theme/OS, but padding + border stands out consistently. [web:602][web:636]
+        style.configure("Card.TEntry", padding=10)
+        style.map(
+            "Card.TEntry",
+            foreground=[("!disabled", COL_TEXT)],
+        )
+
+        # Notebook tab font a bit bigger
+        style.configure("TNotebook.Tab", padding=(14, 8), font=("Segoe UI", 12))
 
     def _build_header(self):
         header = ttk.Frame(self)
-        header.pack(fill="x", pady=(0, 12))
+        header.pack(fill="x", pady=(0, 14))
 
-        ttk.Label(header, text="LanguageTool:", style="Big.TLabel").pack(side="left")
+        left = ttk.Frame(header)
+        left.pack(side="left", fill="x", expand=True)
+
+        ttk.Label(left, text="LanguageTool:", style="Big.TLabel").pack(side="left")
         self.online_var = tk.StringVar(value="Checking...")
-        ttk.Label(header, textvariable=self.online_var, style="Big.TLabel").pack(side="left", padx=10)
+        ttk.Label(left, textvariable=self.online_var, style="Big.TLabel").pack(side="left", padx=10)
+
+        ttk.Label(
+            left,
+            text="Enter = Check, Shift+Enter = newline",
+            style="Sub.TLabel",
+        ).pack(side="left", padx=18)
 
         ttk.Button(
             header,
             text="Check connection",
             command=self._update_online_status,
             style="Big.TButton"
-        ).pack(side="left", padx=10)
+        ).pack(side="right")
 
     def _build_tabs(self):
         self.nb = ttk.Notebook(self)
@@ -177,10 +216,10 @@ class WordsTab(ttk.Frame):
         ttk.Button(top, text="Next 3", command=self.next_round, style="Big.TButton").pack(side="right", padx=10)
 
         self.stats_var = tk.StringVar(value="")
-        ttk.Label(self, textvariable=self.stats_var, style="Big.TLabel").pack(anchor="w", pady=(14, 10))
+        ttk.Label(self, textvariable=self.stats_var, style="Big.TLabel").pack(anchor="w", pady=(16, 12))
 
         cards = ttk.Frame(self)
-        cards.pack(fill="both", expand=True, pady=(8, 14))
+        cards.pack(fill="both", expand=True, pady=(0, 14))
 
         self.prompt_vars = [tk.StringVar(), tk.StringVar(), tk.StringVar()]
         self.entry_vars = [tk.StringVar(), tk.StringVar(), tk.StringVar()]
@@ -189,11 +228,15 @@ class WordsTab(ttk.Frame):
         wrap = 520
 
         for i in range(3):
-            col = ttk.LabelFrame(cards, text=f"Word {i+1}", style="Big.TLabelframe")
+            col = ttk.LabelFrame(cards, text=f"Word {i+1}", style="Card.TLabelframe")
             col.pack(side="left", fill="both", expand=True, padx=12)
 
             ttk.Label(col, textvariable=self.prompt_vars[i], wraplength=wrap, style="Big.TLabel").pack(anchor="w", padx=14, pady=(14, 10))
-            tk.Entry(col, textvariable=self.entry_vars[i], font=("Helvetica", 20)).pack(fill="x", padx=14, pady=8, ipady=8)
+
+            # Entry that stands out from the dark theme
+            e = ttk.Entry(col, textvariable=self.entry_vars[i], style="Card.TEntry", font=("Segoe UI", 16))
+            e.pack(fill="x", padx=14, pady=8, ipady=6)
+
             ttk.Label(col, textvariable=self.result_vars[i], wraplength=wrap, style="Big.TLabel").pack(anchor="w", padx=14, pady=(10, 14))
 
         btns = ttk.Frame(self)
@@ -284,22 +327,26 @@ class WordsTab(ttk.Frame):
             expected_variants = _extract_variants(expected)
             ok = user_norm in expected_variants
 
+            # RU -> EN: show popup with correct EN if wrong
             if not ok and self.mode.get() == "RU_TO_EN":
                 poss_en = set()
                 for ru_v in _extract_variants(prompt):
                     poss_en |= ru_index.get(ru_v, set())
                 ok = user_norm in poss_en
                 if not ok:
-                    messagebox.showinfo("Correct answer", f"{', '.join(sorted(poss_en)[:20])}")
+                    correct = ", ".join(sorted(poss_en)[:40]) if poss_en else "(not found)"
+                    messagebox.showinfo("Correct translation", f"{prompt}\n\nCorrect EN: {correct}")
                 self.result_vars[i].set("Correct" if ok else "Wrong")
 
+            # EN -> RU: show popup with correct RU if wrong
             elif not ok and self.mode.get() == "EN_TO_RU":
                 poss_ru = set()
                 for en_v in _extract_variants(prompt):
                     poss_ru |= en_index.get(en_v, set())
                 ok = user_norm in poss_ru
                 if not ok:
-                    messagebox.showinfo("Correct answer", f"{', '.join(sorted(poss_ru)[:20])}")
+                    correct = ", ".join(sorted(poss_ru)[:40]) if poss_ru else "(not found)"
+                    messagebox.showinfo("Correct translation", f"{prompt}\n\nCorrect RU: {correct}")
                 self.result_vars[i].set("Correct" if ok else "Wrong")
 
             else:
@@ -355,7 +402,7 @@ class SentencesTab(ttk.Frame):
         self._refresh_stats()
         self.next_words()
 
-    def _adjust_text_height_now(self, widget: tk.Text, min_lines: int = 2, max_lines: int = 6):
+    def _adjust_text_height_now(self, widget: tk.Text, min_lines: int = 2, max_lines: int = 7):
         try:
             line_count = int(widget.index("end-1c").split(".")[0])
         except Exception:
@@ -400,10 +447,10 @@ class SentencesTab(ttk.Frame):
         ttk.Button(top, text="Next 5 words", command=self.next_words, style="Big.TButton").pack(side="right", padx=10)
 
         self.stats_var = tk.StringVar(value="")
-        ttk.Label(self, textvariable=self.stats_var, style="Big.TLabel").pack(anchor="w", pady=(14, 10))
+        ttk.Label(self, textvariable=self.stats_var, style="Big.TLabel").pack(anchor="w", pady=(16, 12))
 
         grid = ttk.Frame(self)
-        grid.pack(fill="both", expand=True, pady=(8, 14))
+        grid.pack(fill="both", expand=True, pady=(0, 14))
         for c in range(3):
             grid.columnconfigure(c, weight=1)
         grid.rowconfigure(0, weight=1)
@@ -412,14 +459,14 @@ class SentencesTab(ttk.Frame):
         wrap = 420
 
         for i in range(5):
-            col = ttk.LabelFrame(grid, text=f"Word {i+1}", style="Big.TLabelframe")
+            col = ttk.LabelFrame(grid, text=f"Word {i+1}", style="Card.TLabelframe")
             if i < 3:
                 col.grid(row=0, column=i, sticky="nsew", padx=10, pady=10)
             else:
                 col.grid(row=1, column=0 if i == 3 else 2, sticky="nsew", padx=10, pady=10)
 
             ttk.Label(col, textvariable=self.word_vars[i], wraplength=wrap, style="Big.TLabel").pack(anchor="w", padx=12, pady=(12, 6))
-            ttk.Label(col, text="Write a sentence with this word.", style="Big.TLabel", wraplength=wrap).pack(anchor="w", padx=12, pady=(0, 8))
+            ttk.Label(col, text="Write a sentence with this word.", style="Sub.TLabel", wraplength=wrap).pack(anchor="w", padx=12, pady=(0, 8))
 
             text_frame = ttk.Frame(col)
             text_frame.pack(fill="both", expand=True, padx=12, pady=6)
@@ -428,11 +475,33 @@ class SentencesTab(ttk.Frame):
                 text_frame,
                 wrap="word",
                 height=2,
-                font=("Helvetica", 16),
+                font=("Segoe UI", 13),
                 undo=True,
                 autoseparators=True,
                 maxundo=-1,
+                bd=0,
+                highlightthickness=1,
+                highlightbackground="#263245",
+                highlightcolor=COL_ACCENT,
             )
+            # Make input area visibly different from dark theme background. [web:643]
+            txt.configure(
+                bg=COL_INPUT_BG,
+                fg=COL_TEXT,
+                insertbackground=COL_ACCENT,
+                selectbackground=COL_SELECT_BG,
+                selectforeground="#FFFFFF",
+            )
+
+            def on_focus_in(e, w=txt):
+                w.configure(bg=COL_INPUT_BG_FOCUS)
+
+            def on_focus_out(e, w=txt):
+                w.configure(bg=COL_INPUT_BG)
+
+            txt.bind("<FocusIn>", on_focus_in)
+            txt.bind("<FocusOut>", on_focus_out)
+
             scr = ttk.Scrollbar(text_frame, orient="vertical", command=txt.yview)
             txt.configure(yscrollcommand=scr.set)
 
@@ -445,7 +514,7 @@ class SentencesTab(ttk.Frame):
 
             self.text_widgets.append(txt)
 
-            ttk.Label(col, textvariable=self.result_vars[i], wraplength=wrap, style="Big.TLabel").pack(anchor="w", padx=12, pady=(8, 12))
+            ttk.Label(col, textvariable=self.result_vars[i], wraplength=wrap, style="Sub.TLabel").pack(anchor="w", padx=12, pady=(8, 12))
 
         btns = ttk.Frame(self)
         btns.pack(fill="x", pady=(8, 0))
@@ -544,7 +613,7 @@ class SentencesTab(ttk.Frame):
                 except Exception as e:
                     results.append((False, f"Error: {e}", [], False))
 
-            # UI update must happen in main thread via after() to stay safe/responsive. [web:566][web:577]
+            # UI updates in the main thread via after(). [web:602]
             self.after(0, lambda: self._apply_check_results(idx_map, results))
 
         threading.Thread(target=worker, daemon=True).start()
