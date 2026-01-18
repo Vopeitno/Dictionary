@@ -1,5 +1,6 @@
 import tkinter as tk
 import sv_ttk
+
 from ui_app import MainApp
 from storage import load_vocab, save_vocab
 from words_seed import SEED_WORDS
@@ -13,38 +14,39 @@ def ensure_seed():
     save_vocab(SEED_WORDS)
 
 
-def center_window(window, width=1400, height=900):
-    """Центрировать окно на экране"""
-    screen_width = window.winfo_screenwidth()
-    screen_height = window.winfo_screenheight()
-    
-    x = (screen_width - width) // 2
-    y = (screen_height - height) // 2
-    
-    window.geometry(f"{width}x{height}+{x}+{y}")
-
-
 def main():
-    """Основная функция"""
+    """Оптимизированная главная функция"""
+    # Загружаем данные до создания UI
     ensure_seed()
-
+    
+    # Создаем окно с минимальными настройками
     root = tk.Tk()
-    root.title("LinguaFlow • English Learning Platform")
+    root.title("LinguaFlow • Learn English")
     
-    # Установка иконки (если есть)
+    # Отключаем визуальные эффекты для производительности
+    root.attributes('-alpha', 1.0)
+    root.attributes('-fullscreen', 0)
+    
+    # Устанавливаем тему ДО создания виджетов
+    sv_ttk.set_theme("dark")
+    
+    # Устанавливаем размеры
+    root.geometry("1200x800")
+    
     try:
-        root.iconbitmap("icon.ico")
-    except:
-        pass
-    
-    # Центрирование окна
-    center_window(root, 1400, 900)
-    
-    # Создание приложения
-    app = MainApp(root)
-    
-    # Запуск главного цикла
-    root.mainloop()
+        # Создаем приложение
+        app = MainApp(root)
+        
+        # Обновляем интерфейс один раз
+        root.update_idletasks()
+        
+        # Запускаем главный цикл
+        root.mainloop()
+        
+    except Exception as e:
+        print(f"Error: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 if __name__ == "__main__":

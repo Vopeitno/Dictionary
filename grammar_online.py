@@ -202,26 +202,42 @@ def _looks_like_v2(tok: str) -> bool:
     return False
 
 
-def lt_online(timeout: float = 2.5) -> bool:
+def lt_online(timeout: float = 2.0) -> bool:
+    """Быстрая проверка подключения с таймаутом"""
     try:
-        r = requests.post(LT_ENDPOINT, data={"text": "Hello.", "language": "en-US"}, timeout=timeout)
+        r = requests.post(
+            LT_ENDPOINT, 
+            data={"text": "Hello.", "language": "en-US"}, 
+            timeout=timeout
+        )
         return r.status_code == 200
+    except requests.exceptions.Timeout:
+        return False
     except Exception:
         return False
 
 
 def check_grammar_language_tool(sentence: str, lang: str = "en-US") -> List[dict]:
     """
-    LanguageTool check endpoint returns JSON with 'matches'. [web:582]
+    LanguageTool check с оптимизированным таймаутом
     """
-    resp = requests.post(
-        LT_ENDPOINT,
-        data={"text": sentence, "language": lang},
-        timeout=10,
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    return data.get("matches", [])
+    try:
+        resp = requests.post(
+            LT_ENDPOINT,
+            data={
+                "text": sentence, 
+                "language": lang,
+                "enabledOnly": "false"
+            },
+            timeout=5,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("matches", [])
+    except requests.exceptions.Timeout:
+        return [{"message": "Grammar check timeout", "rule": {"id": "timeout"}}]
+    except Exception as e:
+        return [{"message": f"Error: {str(e)}", "rule": {"id": "error"}}]
 
 
 # --- Tense matcher with gaps (allows inserts like adverbs) ---
