@@ -184,7 +184,7 @@ class MainWindow(QMainWindow):
         
     def _init_ui(self):
         """Инициализация интерфейса"""
-        self.setWindowTitle("LinguaFlow • Learn English")
+        self.setWindowTitle("Method • Learn English")
         self.setGeometry(100, 100, 1920, 1080)
         
         # Центрируем окно
@@ -261,7 +261,7 @@ class MainWindow(QMainWindow):
         header_layout.setContentsMargins(0, 0, 0, 0)
         
         # Заголовок
-        title_label = QLabel("LINGUAFLOW")
+        title_label = QLabel("Method")
         title_label.setFont(Fonts.h1)
         title_label.setStyleSheet(f"color: {Colors.text_accent.name()};")
         
@@ -1214,9 +1214,9 @@ def main():
     ensure_seed()
     
     app = QApplication(sys.argv)
-    app.setApplicationName("LinguaFlow")
-    app.setOrganizationName("LinguaFlow")
-    
+    app.setApplicationName("Method")
+    app.setOrganizationName("Method")
+
     # Настройка стиля приложения
     app.setStyle("Fusion")
     
