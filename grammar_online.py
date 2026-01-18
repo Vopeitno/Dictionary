@@ -4,9 +4,11 @@ from typing import List, Tuple, Dict, Set
 
 import requests
 
+# Public LanguageTool API endpoint. [web:582]
 LT_ENDPOINT = "https://api.languagetool.org/v2/check"
 
 
+# --- Irregular verbs (base -> (V2, V3)) ---
 IRREGULAR: Dict[str, Tuple[str, str]] = {
     "be": ("was/were", "been"),
     "become": ("became", "become"),
@@ -59,38 +61,12 @@ IRREGULAR: Dict[str, Tuple[str, str]] = {
 }
 
 
-# Tokens that can be omitted from required "word/phrase" when checking "used in sentence".
-# This is a pragmatic trainer heuristic, not strict linguistics. [web:472]
 OPTIONAL_TOKENS = {
-    "a",
-    "an",
-    "the",
-    "to",
-    "in",
-    "on",
-    "at",
-    "of",
-    "for",
-    "with",
-    "about",
-    "from",
-    "into",
-    "it",
-    "this",
-    "that",
-    "these",
-    "those",
-    "my",
-    "your",
-    "his",
-    "her",
-    "our",
-    "their",
-    "me",
-    "him",
-    "her",
-    "us",
-    "them",
+    "a", "an", "the",
+    "to", "in", "on", "at", "of", "for", "with", "about", "from", "into",
+    "it", "this", "that", "these", "those",
+    "my", "your", "his", "her", "our", "their",
+    "me", "him", "her", "us", "them",
 }
 
 
@@ -119,13 +95,17 @@ def _tokens(text: str) -> List[str]:
 
 
 def _simple_forms(base: str) -> Set[str]:
+    """
+    Generate a minimal set of common forms for simple word usage detection:
+    base, 3rd person, past, -ing, and irregular V2/V3 where known.
+    """
     b = _norm(base)
     if not b:
         return set()
 
     forms = {b}
 
-    # 3rd person
+    # 3rd person / plural
     if b.endswith("y") and len(b) > 2 and b[-2] not in "aeiou":
         forms.add(b[:-1] + "ies")
     if b.endswith(("s", "x", "z", "ch", "sh")):
@@ -156,43 +136,35 @@ def _simple_forms(base: str) -> Set[str]:
 
 
 def _required_content_tokens(required_word: str) -> List[str]:
-    """
-    Convert required phrase to content tokens (remove optional tokens like 'the', 'it').
-    Example:
-      "sign it" -> ["sign"]
-      "the effort" -> ["effort"]
-      "believe in" -> ["believe"]
-    """
     req = _tokens(required_word)
     return [t for t in req if t not in OPTIONAL_TOKENS]
 
 
 def used_word_in_sentence(sentence: str, required_word: str) -> bool:
+    """
+    Checks that the required word (or its simple forms) appears in the sentence.
+    For multi-token phrases: requires content tokens contiguously, and allows
+    inflection only on the first token.
+    """
     toks = _tokens(sentence)
     tokset = set(toks)
 
     content = _required_content_tokens(required_word)
-
-    # If after removing optional tokens nothing remains, fallback to raw tokens
     if not content:
         content = _tokens(required_word)
 
-    # Single content token -> check inflected forms
     if len(content) == 1:
         for f in _simple_forms(content[0]):
             if f in tokset:
                 return True
         return False
 
-    # Phrase content tokens -> require them contiguously in order.
-    # Allow inflection only on the first content token (usually the verb).
     head = content[0]
     tail = content[1:]
     head_forms = _simple_forms(head)
 
     n = len(toks)
     m = len(tail)
-
     for i in range(n):
         if toks[i] not in head_forms:
             continue
@@ -205,7 +177,6 @@ def used_word_in_sentence(sentence: str, required_word: str) -> bool:
                 break
         if ok:
             return True
-
     return False
 
 
@@ -217,8 +188,7 @@ def _looks_like_v3(tok: str) -> bool:
     if _ends_with_ed(tok):
         return True
     for _base, (_v2, v3) in IRREGULAR.items():
-        forms = [x.strip() for x in v3.split("/")]
-        if tok in forms:
+        if tok in [x.strip() for x in v3.split("/")]:
             return True
     return False
 
@@ -227,23 +197,23 @@ def _looks_like_v2(tok: str) -> bool:
     if _ends_with_ed(tok):
         return True
     for _base, (v2, _v3) in IRREGULAR.items():
-        forms = [x.strip() for x in v2.split("/")]
-        if tok in forms:
+        if tok in [x.strip() for x in v2.split("/")]:
             return True
     return False
 
 
 def lt_online(timeout: float = 2.5) -> bool:
     try:
-        r = requests.post(
-            LT_ENDPOINT, data={"text": "Hello.", "language": "en-US"}, timeout=timeout
-        )
+        r = requests.post(LT_ENDPOINT, data={"text": "Hello.", "language": "en-US"}, timeout=timeout)
         return r.status_code == 200
     except Exception:
         return False
 
 
 def check_grammar_language_tool(sentence: str, lang: str = "en-US") -> List[dict]:
+    """
+    LanguageTool check endpoint returns JSON with 'matches'. [web:582]
+    """
     resp = requests.post(
         LT_ENDPOINT,
         data={"text": sentence, "language": lang},
@@ -254,86 +224,40 @@ def check_grammar_language_tool(sentence: str, lang: str = "en-US") -> List[dict
     return data.get("matches", [])
 
 
+# --- Tense matcher with gaps (allows inserts like adverbs) ---
+
+def _match_sequence_with_gaps(tokens: List[str], parts: List[Set[str]], max_gap: int) -> bool:
+    """
+    Find parts[0], then parts[1] ... in order, allowing up to max_gap tokens between parts.
+    """
+    n = len(tokens)
+    starts = [i for i, t in enumerate(tokens) if t in parts[0]]
+    for s in starts:
+        pos = s
+        ok = True
+        for k in range(1, len(parts)):
+            found = False
+            for j in range(pos + 1, min(n, pos + 1 + max_gap + 1)):
+                if tokens[j] in parts[k]:
+                    pos = j
+                    found = True
+                    break
+            if not found:
+                ok = False
+                break
+        if ok:
+            return True
+    return False
+
+
 def tense_heuristic_ok(sentence: str, tense: str) -> Tuple[bool, str]:
     toks = _tokens(sentence.strip())
 
-    has_will = "will" in toks
-    has_had = "had" in toks
-    has_been = "been" in toks
-    has_am_is_are = any(t in toks for t in ["am", "is", "are"])
-    has_was_were = any(t in toks for t in ["was", "were"])
-
-    def has_ing_after(aux_set: List[str]) -> bool:
-        for i, t in enumerate(toks[:-1]):
-            if t in aux_set and toks[i + 1].endswith("ing"):
-                return True
-        return False
-
-    def has_have_v3() -> bool:
-        for i, t in enumerate(toks[:-1]):
-            if t in ["have", "has"] and _looks_like_v3(toks[i + 1]):
-                return True
-        return False
-
-    def has_had_v3() -> bool:
-        for i, t in enumerate(toks[:-1]):
-            if t == "had" and _looks_like_v3(toks[i + 1]):
-                return True
-        return False
-
-    def has_will_have_v3() -> bool:
-        for i in range(len(toks) - 2):
-            if (
-                toks[i] == "will"
-                and toks[i + 1] == "have"
-                and _looks_like_v3(toks[i + 2])
-            ):
-                return True
-        return False
-
-    def has_will_be_ing() -> bool:
-        for i in range(len(toks) - 2):
-            if (
-                toks[i] == "will"
-                and toks[i + 1] == "be"
-                and toks[i + 2].endswith("ing")
-            ):
-                return True
-        return False
-
-    def has_have_been_ing() -> bool:
-        for i in range(len(toks) - 2):
-            if (
-                toks[i] in ["have", "has"]
-                and toks[i + 1] == "been"
-                and toks[i + 2].endswith("ing")
-            ):
-                return True
-        return False
-
-    def has_had_been_ing() -> bool:
-        for i in range(len(toks) - 2):
-            if (
-                toks[i] == "had"
-                and toks[i + 1] == "been"
-                and toks[i + 2].endswith("ing")
-            ):
-                return True
-        return False
-
-    def has_will_have_been_ing() -> bool:
-        for i in range(len(toks) - 3):
-            if (
-                toks[i] == "will"
-                and toks[i + 1] == "have"
-                and toks[i + 2] == "been"
-                and toks[i + 3].endswith("ing")
-            ):
-                return True
-        return False
+    # allow 1-3 filler tokens between auxiliaries (e.g. "will just be working")
+    G = 3
 
     if tense == "Future Simple":
-        return (True, "Found 'will'.") if has_will else (False, "Expected: will + V1.")
+        return (True, "Found 'will'.") if "will" in toks else (False, "Expected: will + V1.")
 
     if tense == "Past Simple":
         if "did" in toks:
@@ -343,74 +267,49 @@ def tense_heuristic_ok(sentence: str, tense: str) -> Tuple[bool, str]:
         return False, "Expected: did + V1 or V2."
 
     if tense == "Present Simple":
-        if has_will or has_had or has_been:
+        if "will" in toks or "had" in toks or "been" in toks:
             return False, "Looks like Future/Perfect (will/had/been found)."
-        if (has_am_is_are or has_was_were) and any(t.endswith("ing") for t in toks):
-            return False, "Looks like Continuous (be + V-ing)."
+        # If it looks like Continuous, reject
+        ing = {t for t in toks if t.endswith("ing")}
+        if ing and _match_sequence_with_gaps(toks, [set(["am", "is", "are"]), ing], 1):
+            return False, "Looks like Continuous (be ... V-ing)."
         return True, "No strong markers of other tenses."
 
     if tense == "Present Continuous":
-        return (
-            (True, "Found am/is/are + V-ing.")
-            if has_ing_after(["am", "is", "are"])
-            else (False, "Expected: am/is/are + V-ing.")
-        )
+        ing = {t for t in toks if t.endswith("ing")}
+        return (True, "Found am/is/are ... V-ing.") if (ing and _match_sequence_with_gaps(toks, [set(["am", "is", "are"]), ing], G)) else (False, "Expected: am/is/are ... V-ing.")
 
     if tense == "Past Continuous":
-        return (
-            (True, "Found was/were + V-ing.")
-            if has_ing_after(["was", "were"])
-            else (False, "Expected: was/were + V-ing.")
-        )
+        ing = {t for t in toks if t.endswith("ing")}
+        return (True, "Found was/were ... V-ing.") if (ing and _match_sequence_with_gaps(toks, [set(["was", "were"]), ing], G)) else (False, "Expected: was/were ... V-ing.")
 
     if tense == "Future Continuous":
-        return (
-            (True, "Found will be + V-ing.")
-            if has_will_be_ing()
-            else (False, "Expected: will be + V-ing.")
-        )
+        ing = {t for t in toks if t.endswith("ing")}
+        return (True, "Found will ... be ... V-ing.") if (ing and _match_sequence_with_gaps(toks, [set(["will"]), set(["be"]), ing], G)) else (False, "Expected: will ... be ... V-ing.")
 
     if tense == "Present Perfect":
-        return (
-            (True, "Found have/has + V3.")
-            if has_have_v3()
-            else (False, "Expected: have/has + V3.")
-        )
+        v3 = {t for t in toks if _looks_like_v3(t)}
+        return (True, "Found have/has ... V3.") if (v3 and _match_sequence_with_gaps(toks, [set(["have", "has"]), v3], G)) else (False, "Expected: have/has ... V3.")
 
     if tense == "Past Perfect":
-        return (
-            (True, "Found had + V3.")
-            if has_had_v3()
-            else (False, "Expected: had + V3.")
-        )
+        v3 = {t for t in toks if _looks_like_v3(t)}
+        return (True, "Found had ... V3.") if (v3 and _match_sequence_with_gaps(toks, [set(["had"]), v3], G)) else (False, "Expected: had ... V3.")
 
     if tense == "Future Perfect":
-        return (
-            (True, "Found will have + V3.")
-            if has_will_have_v3()
-            else (False, "Expected: will have + V3.")
-        )
+        v3 = {t for t in toks if _looks_like_v3(t)}
+        return (True, "Found will ... have ... V3.") if (v3 and _match_sequence_with_gaps(toks, [set(["will"]), set(["have"]), v3], G)) else (False, "Expected: will ... have ... V3.")
 
     if tense == "Present Perfect Continuous":
-        return (
-            (True, "Found have/has been + V-ing.")
-            if has_have_been_ing()
-            else (False, "Expected: have/has been + V-ing.")
-        )
+        ing = {t for t in toks if t.endswith("ing")}
+        return (True, "Found have/has ... been ... V-ing.") if (ing and _match_sequence_with_gaps(toks, [set(["have", "has"]), set(["been"]), ing], G)) else (False, "Expected: have/has ... been ... V-ing.")
 
     if tense == "Past Perfect Continuous":
-        return (
-            (True, "Found had been + V-ing.")
-            if has_had_been_ing()
-            else (False, "Expected: had been + V-ing.")
-        )
+        ing = {t for t in toks if t.endswith("ing")}
+        return (True, "Found had ... been ... V-ing.") if (ing and _match_sequence_with_gaps(toks, [set(["had"]), set(["been"]), ing], G)) else (False, "Expected: had ... been ... V-ing.")
 
     if tense == "Future Perfect Continuous":
-        return (
-            (True, "Found will have been + V-ing.")
-            if has_will_have_been_ing()
-            else (False, "Expected: will have been + V-ing.")
-        )
+        ing = {t for t in toks if t.endswith("ing")}
+        return (True, "Found will ... have ... been ... V-ing.") if (ing and _match_sequence_with_gaps(toks, [set(["will"]), set(["have"]), set(["been"]), ing], G)) else (False, "Expected: will ... have ... been ... V-ing.")
 
     return False, "Unknown tense."
 
@@ -425,9 +324,7 @@ class SentenceCheckResult:
     matches: List[dict]
 
 
-def check_sentence(
-    sentence: str, required_word: str, tense: str
-) -> SentenceCheckResult:
+def check_sentence(sentence: str, required_word: str, tense: str) -> SentenceCheckResult:
     used = used_word_in_sentence(sentence, required_word)
     tense_ok, tense_msg = tense_heuristic_ok(sentence, tense)
 

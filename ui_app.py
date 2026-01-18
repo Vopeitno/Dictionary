@@ -1,5 +1,6 @@
 import random
 import re
+import threading
 import tkinter as tk
 from tkinter import ttk, messagebox
 
@@ -87,15 +88,13 @@ class MainApp(ttk.Frame):
 
         ttk.Label(header, text="LanguageTool:", style="Big.TLabel").pack(side="left")
         self.online_var = tk.StringVar(value="Checking...")
-        ttk.Label(header, textvariable=self.online_var, style="Big.TLabel").pack(
-            side="left", padx=10
-        )
+        ttk.Label(header, textvariable=self.online_var, style="Big.TLabel").pack(side="left", padx=10)
 
         ttk.Button(
             header,
             text="Check connection",
             command=self._update_online_status,
-            style="Big.TButton",
+            style="Big.TButton"
         ).pack(side="left", padx=10)
 
     def _build_tabs(self):
@@ -103,25 +102,19 @@ class MainApp(ttk.Frame):
         self.nb.pack(fill="both", expand=True)
 
         self.tab_words = WordsTab(self.nb, self.items)
-        self.tab_sentences = SentencesTab(
-            self.nb, self.items, online_var=self.online_var
-        )
+        self.tab_sentences = SentencesTab(self.nb, self.items, online_var=self.online_var)
 
         self.nb.add(self.tab_words, text="Words")
         self.nb.add(self.tab_sentences, text="Sentences")
 
     def _bind_keys(self):
-        # Global Enter => check current tab.
-        # IMPORTANT: we do NOT bind Shift-Return globally, because Shift+Enter should insert newline in Text. [web:276]
         self.master.bind_all("<Return>", self._on_enter)
 
     def _on_enter(self, _event=None):
         idx = self.nb.index("current")
         if idx == 0:
             self.tab_words.check()
-        else:
-            # In Sentences, Text widgets handle Enter themselves (call check and return "break"),
-            # but this is fine for Enter pressed outside Text widgets.
+        elif idx == 1:
             self.tab_sentences.check()
 
     def _update_online_status(self):
@@ -171,43 +164,20 @@ class WordsTab(ttk.Frame):
         top.pack(fill="x")
 
         ttk.Label(top, text="Topic:", style="Big.TLabel").pack(side="left")
-        self.topic_box = ttk.Combobox(
-            top, textvariable=self.topic_var, state="readonly", width=34
-        )
+        self.topic_box = ttk.Combobox(top, textvariable=self.topic_var, state="readonly", width=34)
         self.topic_box["values"] = self._topics()
         self.topic_box.pack(side="left", padx=10, ipady=6)
         self.topic_box.bind("<<ComboboxSelected>>", lambda _e: self.next_round())
 
         ttk.Label(top, text="Mode:", style="Big.TLabel").pack(side="left", padx=(18, 0))
-        ttk.Radiobutton(
-            top,
-            text="EN → RU",
-            variable=self.mode,
-            value="EN_TO_RU",
-            command=self.next_round,
-        ).pack(side="left", padx=10)
-        ttk.Radiobutton(
-            top,
-            text="RU → EN",
-            variable=self.mode,
-            value="RU_TO_EN",
-            command=self.next_round,
-        ).pack(side="left")
+        ttk.Radiobutton(top, text="EN → RU", variable=self.mode, value="EN_TO_RU", command=self.next_round).pack(side="left", padx=10)
+        ttk.Radiobutton(top, text="RU → EN", variable=self.mode, value="RU_TO_EN", command=self.next_round).pack(side="left")
 
-        ttk.Button(
-            top, text="Refresh", command=self.reset_progress, style="Big.TButton"
-        ).pack(side="right")
-        ttk.Button(
-            top, text="Next 3", command=self.next_round, style="Big.TButton"
-        ).pack(side="right", padx=10)
-        ttk.Button(
-            top, text="Editor", command=self.open_editor, style="Big.TButton"
-        ).pack(side="right", padx=10)
+        ttk.Button(top, text="Refresh", command=self.reset_progress, style="Big.TButton").pack(side="right")
+        ttk.Button(top, text="Next 3", command=self.next_round, style="Big.TButton").pack(side="right", padx=10)
 
         self.stats_var = tk.StringVar(value="")
-        ttk.Label(self, textvariable=self.stats_var, style="Big.TLabel").pack(
-            anchor="w", pady=(14, 10)
-        )
+        ttk.Label(self, textvariable=self.stats_var, style="Big.TLabel").pack(anchor="w", pady=(14, 10))
 
         cards = ttk.Frame(self)
         cards.pack(fill="both", expand=True, pady=(8, 14))
@@ -222,33 +192,15 @@ class WordsTab(ttk.Frame):
             col = ttk.LabelFrame(cards, text=f"Word {i+1}", style="Big.TLabelframe")
             col.pack(side="left", fill="both", expand=True, padx=12)
 
-            ttk.Label(
-                col,
-                textvariable=self.prompt_vars[i],
-                wraplength=wrap,
-                style="Big.TLabel",
-            ).pack(anchor="w", padx=14, pady=(14, 10))
-            tk.Entry(col, textvariable=self.entry_vars[i], font=("Helvetica", 20)).pack(
-                fill="x", padx=14, pady=8, ipady=8
-            )
-            ttk.Label(
-                col,
-                textvariable=self.result_vars[i],
-                wraplength=wrap,
-                style="Big.TLabel",
-            ).pack(anchor="w", padx=14, pady=(10, 14))
+            ttk.Label(col, textvariable=self.prompt_vars[i], wraplength=wrap, style="Big.TLabel").pack(anchor="w", padx=14, pady=(14, 10))
+            tk.Entry(col, textvariable=self.entry_vars[i], font=("Helvetica", 20)).pack(fill="x", padx=14, pady=8, ipady=8)
+            ttk.Label(col, textvariable=self.result_vars[i], wraplength=wrap, style="Big.TLabel").pack(anchor="w", padx=14, pady=(10, 14))
 
         btns = ttk.Frame(self)
         btns.pack(fill="x", pady=(8, 0))
-        ttk.Button(btns, text="Check", command=self.check, style="Big.TButton").pack(
-            side="left"
-        )
-        ttk.Button(
-            btns, text="Show answers", command=self.show_answers, style="Big.TButton"
-        ).pack(side="left", padx=10)
-        ttk.Button(
-            btns, text="Clear", command=self.clear_inputs, style="Big.TButton"
-        ).pack(side="left")
+        ttk.Button(btns, text="Check", command=self.check, style="Big.TButton").pack(side="left")
+        ttk.Button(btns, text="Show answers", command=self.show_answers, style="Big.TButton").pack(side="left", padx=10)
+        ttk.Button(btns, text="Clear", command=self.clear_inputs, style="Big.TButton").pack(side="left")
 
         if not self.topic_var.get():
             self.topic_var.set("All topics")
@@ -310,7 +262,7 @@ class WordsTab(ttk.Frame):
             if i >= len(self.current):
                 continue
             _, expected = self._get_prompt_and_expected(self.current[i])
-            self.result_vars[i].set(f"Answer: {expected}")
+            messagebox.showinfo("Answer", f"{self.prompt_vars[i].get()} = {expected}")
 
     def check(self):
         if not self.current:
@@ -337,155 +289,28 @@ class WordsTab(ttk.Frame):
                 for ru_v in _extract_variants(prompt):
                     poss_en |= ru_index.get(ru_v, set())
                 ok = user_norm in poss_en
-                self.result_vars[i].set(
-                    "Correct"
-                    if ok
-                    else f"Wrong. Accepted: {', '.join(sorted(poss_en)[:10])}"
-                )
+                if not ok:
+                    messagebox.showinfo("Correct answer", f"{', '.join(sorted(poss_en)[:20])}")
+                self.result_vars[i].set("Correct" if ok else "Wrong")
 
             elif not ok and self.mode.get() == "EN_TO_RU":
                 poss_ru = set()
                 for en_v in _extract_variants(prompt):
                     poss_ru |= en_index.get(en_v, set())
                 ok = user_norm in poss_ru
-                self.result_vars[i].set(
-                    "Correct"
-                    if ok
-                    else f"Wrong. Accepted: {', '.join(sorted(poss_ru)[:10])}"
-                )
+                if not ok:
+                    messagebox.showinfo("Correct answer", f"{', '.join(sorted(poss_ru)[:20])}")
+                self.result_vars[i].set("Correct" if ok else "Wrong")
 
             else:
-                self.result_vars[i].set(
-                    "Correct"
-                    if ok
-                    else f"Wrong. Accepted: {', '.join(sorted(expected_variants)[:8])}"
-                )
+                if not ok:
+                    messagebox.showinfo("Correct answer", f"{', '.join(sorted(expected_variants)[:20])}")
+                self.result_vars[i].set("Correct" if ok else "Wrong")
 
             if ok:
                 self.learned.add(_card_key_words(item))
 
         self._refresh_stats()
-
-    def open_editor(self):
-        win = tk.Toplevel(self.winfo_toplevel())
-        win.title("Editor (EN / RU / Topic)")
-        win.geometry("1400x800")
-
-        container = ttk.Frame(win, padding=12)
-        container.pack(fill="both", expand=True)
-
-        cols = ("topic", "en", "ru")
-        tree = ttk.Treeview(container, columns=cols, show="headings", height=14)
-        tree.heading("topic", text="Topic")
-        tree.heading("en", text="English")
-        tree.heading("ru", text="Russian")
-        tree.column("topic", width=220)
-        tree.column("en", width=260)
-        tree.column("ru", width=820)
-        tree.pack(fill="both", expand=True)
-
-        def refresh_tree():
-            tree.delete(*tree.get_children())
-            for idx, it in enumerate(self.items):
-                topic = it.get("topic", "Simple words")
-                tree.insert(
-                    "",
-                    "end",
-                    iid=str(idx),
-                    values=(topic, it.get("en", ""), it.get("ru", "")),
-                )
-            self._refresh_stats()
-
-        form = ttk.Frame(container)
-        form.pack(fill="x", pady=(12, 0))
-
-        topic_var = tk.StringVar(value="Simple words")
-        en_var = tk.StringVar()
-        ru_var = tk.StringVar()
-
-        ttk.Label(form, text="Topic:").grid(row=0, column=0, sticky="w")
-        ttk.Entry(form, textvariable=topic_var, width=22).grid(
-            row=0, column=1, sticky="w", padx=8
-        )
-
-        ttk.Label(form, text="EN:").grid(row=0, column=2, sticky="w")
-        ttk.Entry(form, textvariable=en_var, width=26).grid(
-            row=0, column=3, sticky="we", padx=8
-        )
-
-        ttk.Label(form, text="RU:").grid(row=0, column=4, sticky="w")
-        ttk.Entry(form, textvariable=ru_var, width=60).grid(
-            row=0, column=5, sticky="we", padx=8
-        )
-
-        form.columnconfigure(5, weight=1)
-
-        def add_word():
-            topic = topic_var.get().strip() or "Simple words"
-            en = en_var.get().strip()
-            ru = ru_var.get().strip()
-            if not en or not ru:
-                messagebox.showwarning("Error", "Fill EN and RU.")
-                return
-            self.items.append({"topic": topic, "en": en, "ru": ru})
-            save_vocab(self.items)
-            refresh_tree()
-            en_var.set("")
-            ru_var.set("")
-
-        def delete_selected():
-            sel = tree.selection()
-            if not sel:
-                return
-            idx = int(sel[0])
-            item = self.items[idx]
-            self.learned.discard(_card_key_words(item))
-            self.items.pop(idx)
-            save_vocab(self.items)
-            refresh_tree()
-
-        def load_selected_into_form(_evt=None):
-            sel = tree.selection()
-            if not sel:
-                return
-            idx = int(sel[0])
-            it = self.items[idx]
-            topic_var.set(it.get("topic", "Simple words"))
-            en_var.set(it.get("en", ""))
-            ru_var.set(it.get("ru", ""))
-
-        def update_selected():
-            sel = tree.selection()
-            if not sel:
-                messagebox.showwarning("No selection", "Select a row.")
-                return
-            idx = int(sel[0])
-            old_item = self.items[idx]
-            self.learned.discard(_card_key_words(old_item))
-
-            topic = topic_var.get().strip() or "Simple words"
-            en = en_var.get().strip()
-            ru = ru_var.get().strip()
-            if not en or not ru:
-                messagebox.showwarning("Error", "Fill EN and RU.")
-                return
-
-            self.items[idx] = {"topic": topic, "en": en, "ru": ru}
-            save_vocab(self.items)
-            refresh_tree()
-
-        btn_row = ttk.Frame(container)
-        btn_row.pack(fill="x", pady=(12, 0))
-        ttk.Button(btn_row, text="Add", command=add_word).pack(side="left")
-        ttk.Button(btn_row, text="Update selected", command=update_selected).pack(
-            side="left", padx=10
-        )
-        ttk.Button(btn_row, text="Delete selected", command=delete_selected).pack(
-            side="left"
-        )
-
-        tree.bind("<<TreeviewSelect>>", load_selected_into_form)
-        refresh_tree()
 
 
 class SentencesTab(ttk.Frame):
@@ -504,6 +329,8 @@ class SentencesTab(ttk.Frame):
         self.text_widgets: list[tk.Text] = []
         self.word_vars = [tk.StringVar() for _ in range(5)]
         self.result_vars = [tk.StringVar() for _ in range(5)]
+
+        self._resize_job = {}
 
         self._build_ui()
         self._refresh_stats()
@@ -528,25 +355,30 @@ class SentencesTab(ttk.Frame):
         self._refresh_stats()
         self.next_words()
 
-    def _adjust_text_height(
-        self, widget: tk.Text, min_lines: int = 2, max_lines: int = 6
-    ):
+    def _adjust_text_height_now(self, widget: tk.Text, min_lines: int = 2, max_lines: int = 6):
         try:
             line_count = int(widget.index("end-1c").split(".")[0])
         except Exception:
             line_count = min_lines
-        new_h = max(min_lines, min(line_count, max_lines))
-        widget.configure(height=new_h)
+        widget.configure(height=max(min_lines, min(line_count, max_lines)))
+
+    def _adjust_text_height_debounced(self, widget: tk.Text):
+        wid = str(widget)
+        job = self._resize_job.get(wid)
+        if job:
+            try:
+                self.after_cancel(job)
+            except Exception:
+                pass
+        self._resize_job[wid] = self.after(90, lambda w=widget: self._adjust_text_height_now(w))
 
     def _on_text_enter(self, _event=None):
-        # Enter => Check and DO NOT insert newline. Returning "break" stops propagation/default action. [web:276]
         self.check()
         return "break"
 
     def _on_text_shift_enter(self, event):
-        # Shift+Enter => insert newline (manual) and stop other handlers (so it doesn't trigger global check).
         event.widget.insert("insert", "\n")
-        self._adjust_text_height(event.widget)
+        self._adjust_text_height_debounced(event.widget)
         return "break"
 
     def _build_ui(self):
@@ -554,37 +386,24 @@ class SentencesTab(ttk.Frame):
         top.pack(fill="x")
 
         ttk.Label(top, text="Topic:", style="Big.TLabel").pack(side="left")
-        self.topic_box = ttk.Combobox(
-            top, textvariable=self.topic_var, state="readonly", width=30
-        )
+        self.topic_box = ttk.Combobox(top, textvariable=self.topic_var, state="readonly", width=30)
         self.topic_box["values"] = self._topics()
         self.topic_box.pack(side="left", padx=10, ipady=6)
         self.topic_box.bind("<<ComboboxSelected>>", lambda _e: self.next_words())
 
-        ttk.Label(top, text="Tense:", style="Big.TLabel").pack(
-            side="left", padx=(18, 0)
-        )
-        self.tense_box = ttk.Combobox(
-            top, textvariable=self.tense_var, state="readonly", width=30
-        )
+        ttk.Label(top, text="Tense:", style="Big.TLabel").pack(side="left", padx=(18, 0))
+        self.tense_box = ttk.Combobox(top, textvariable=self.tense_var, state="readonly", width=30)
         self.tense_box["values"] = TENSES
         self.tense_box.pack(side="left", padx=10, ipady=6)
 
-        ttk.Button(
-            top, text="Refresh", command=self.reset_progress, style="Big.TButton"
-        ).pack(side="right")
-        ttk.Button(
-            top, text="Next 5 words", command=self.next_words, style="Big.TButton"
-        ).pack(side="right", padx=10)
+        ttk.Button(top, text="Refresh", command=self.reset_progress, style="Big.TButton").pack(side="right")
+        ttk.Button(top, text="Next 5 words", command=self.next_words, style="Big.TButton").pack(side="right", padx=10)
 
         self.stats_var = tk.StringVar(value="")
-        ttk.Label(self, textvariable=self.stats_var, style="Big.TLabel").pack(
-            anchor="w", pady=(14, 10)
-        )
+        ttk.Label(self, textvariable=self.stats_var, style="Big.TLabel").pack(anchor="w", pady=(14, 10))
 
         grid = ttk.Frame(self)
         grid.pack(fill="both", expand=True, pady=(8, 14))
-
         for c in range(3):
             grid.columnconfigure(c, weight=1)
         grid.rowconfigure(0, weight=1)
@@ -597,62 +416,45 @@ class SentencesTab(ttk.Frame):
             if i < 3:
                 col.grid(row=0, column=i, sticky="nsew", padx=10, pady=10)
             else:
-                col.grid(
-                    row=1, column=0 if i == 3 else 2, sticky="nsew", padx=10, pady=10
-                )
+                col.grid(row=1, column=0 if i == 3 else 2, sticky="nsew", padx=10, pady=10)
 
-            ttk.Label(
-                col, textvariable=self.word_vars[i], wraplength=wrap, style="Big.TLabel"
-            ).pack(anchor="w", padx=12, pady=(12, 6))
-            ttk.Label(
-                col,
-                text="Write a sentence with this word.",
-                style="Big.TLabel",
-                wraplength=wrap,
-            ).pack(anchor="w", padx=12, pady=(0, 8))
+            ttk.Label(col, textvariable=self.word_vars[i], wraplength=wrap, style="Big.TLabel").pack(anchor="w", padx=12, pady=(12, 6))
+            ttk.Label(col, text="Write a sentence with this word.", style="Big.TLabel", wraplength=wrap).pack(anchor="w", padx=12, pady=(0, 8))
 
             text_frame = ttk.Frame(col)
             text_frame.pack(fill="both", expand=True, padx=12, pady=6)
 
-            txt = tk.Text(text_frame, wrap="word", height=2, font=("Helvetica", 16))
+            txt = tk.Text(
+                text_frame,
+                wrap="word",
+                height=2,
+                font=("Helvetica", 16),
+                undo=True,
+                autoseparators=True,
+                maxundo=-1,
+            )
             scr = ttk.Scrollbar(text_frame, orient="vertical", command=txt.yview)
             txt.configure(yscrollcommand=scr.set)
 
             txt.pack(side="left", fill="both", expand=True)
             scr.pack(side="right", fill="y")
 
-            # Key behavior:
-            # Enter => check (and prevent newline)
-            # Shift+Enter => newline
             txt.bind("<Return>", self._on_text_enter)
             txt.bind("<Shift-Return>", self._on_text_shift_enter)
-
-            txt.bind("<KeyRelease>", lambda e, w=txt: self._adjust_text_height(w))
+            txt.bind("<KeyRelease>", lambda e, w=txt: self._adjust_text_height_debounced(w))
 
             self.text_widgets.append(txt)
 
-            ttk.Label(
-                col,
-                textvariable=self.result_vars[i],
-                wraplength=wrap,
-                style="Big.TLabel",
-            ).pack(anchor="w", padx=12, pady=(8, 12))
+            ttk.Label(col, textvariable=self.result_vars[i], wraplength=wrap, style="Big.TLabel").pack(anchor="w", padx=12, pady=(8, 12))
 
         btns = ttk.Frame(self)
         btns.pack(fill="x", pady=(8, 0))
 
-        ttk.Button(btns, text="Check", command=self.check, style="Big.TButton").pack(
-            side="left"
-        )
-        ttk.Button(
-            btns, text="Show details", command=self.show_details, style="Big.TButton"
-        ).pack(side="left", padx=10)
-        ttk.Button(
-            btns, text="Clear", command=self.clear_inputs, style="Big.TButton"
-        ).pack(side="left")
+        self.check_btn = ttk.Button(btns, text="Check", command=self.check, style="Big.TButton")
+        self.check_btn.pack(side="left")
+        ttk.Button(btns, text="Show details", command=self.show_details, style="Big.TButton").pack(side="left", padx=10)
+        ttk.Button(btns, text="Clear", command=self.clear_inputs, style="Big.TButton").pack(side="left")
 
-        if not self.topic_var.get():
-            self.topic_var.set("All topics")
         self.topic_box.set(self.topic_var.get())
         self.tense_box.set(self.tense_var.get())
 
@@ -676,12 +478,11 @@ class SentencesTab(ttk.Frame):
             self.word_vars[i].set("END")
             self.result_vars[i].set("Press Refresh to start again.")
             self.text_widgets[i].delete("1.0", "end")
-            self._adjust_text_height(self.text_widgets[i])
+            self._adjust_text_height_now(self.text_widgets[i])
 
     def next_words(self):
         pool = self._topic_pool_remaining()
         self._refresh_stats()
-
         if len(pool) == 0:
             self._show_end()
             return
@@ -692,11 +493,10 @@ class SentencesTab(ttk.Frame):
 
         for i in range(5):
             self.text_widgets[i].delete("1.0", "end")
-            self._adjust_text_height(self.text_widgets[i])
+            self._adjust_text_height_now(self.text_widgets[i])
 
             if i < take:
-                w = self.current_words[i].get("en", "")
-                self.word_vars[i].set(w)
+                self.word_vars[i].set(self.current_words[i].get("en", ""))
                 self.result_vars[i].set("")
             else:
                 self.word_vars[i].set("END")
@@ -705,7 +505,7 @@ class SentencesTab(ttk.Frame):
     def clear_inputs(self):
         for i in range(5):
             self.text_widgets[i].delete("1.0", "end")
-            self._adjust_text_height(self.text_widgets[i])
+            self._adjust_text_height_now(self.text_widgets[i])
             self.result_vars[i].set("")
         self.last_matches = [[] for _ in range(5)]
 
@@ -714,34 +514,50 @@ class SentencesTab(ttk.Frame):
             return
 
         if self.online_var.get() != "Online":
-            messagebox.showwarning(
-                "Offline", "LanguageTool is Offline. Grammar check won't work."
-            )
+            messagebox.showwarning("Offline", "LanguageTool is Offline. Grammar check won't work.")
             return
 
         tense = self.tense_var.get().strip() or TENSES[0]
 
+        words, sentences, idx_map = [], [], []
         for i in range(5):
             if i >= len(self.current_words):
                 continue
-
-            item = self.current_words[i]
-            word = item.get("en", "")
+            word = self.current_words[i].get("en", "")
             sentence = self.text_widgets[i].get("1.0", "end-1c").strip()
+            words.append(word)
+            sentences.append(sentence)
+            idx_map.append(i)
 
-            if not sentence:
-                self.result_vars[i].set("Type a sentence.")
-                self.last_matches[i] = []
-                continue
+        self.check_btn.configure(text="Checking...")
+        self.check_btn.state(["disabled"])
 
-            res = check_sentence(sentence=sentence, required_word=word, tense=tense)
-            self.last_matches[i] = res.matches or []
+        def worker():
+            results = []
+            for k, sentence in enumerate(sentences):
+                if not sentence:
+                    results.append((False, "Type a sentence.", [], False))
+                    continue
+                try:
+                    res = check_sentence(sentence=sentence, required_word=words[k], tense=tense)
+                    results.append((True, res.message, res.matches or [], res.ok))
+                except Exception as e:
+                    results.append((False, f"Error: {e}", [], False))
 
-            if res.ok:
-                self.result_vars[i].set("Correct.")
-                self.used_words.add(_word_key_sentence(item))
-            else:
-                self.result_vars[i].set(res.message[:180])
+            # UI update must happen in main thread via after() to stay safe/responsive. [web:566][web:577]
+            self.after(0, lambda: self._apply_check_results(idx_map, results))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _apply_check_results(self, idx_map, results):
+        self.check_btn.configure(text="Check")
+        self.check_btn.state(["!disabled"])
+
+        for pos, (_has, msg, matches, ok) in zip(idx_map, results):
+            self.last_matches[pos] = matches or []
+            self.result_vars[pos].set((msg or "")[:180])
+            if ok:
+                self.used_words.add(_word_key_sentence(self.current_words[pos]))
 
         self._refresh_stats()
 
@@ -750,14 +566,13 @@ class SentencesTab(ttk.Frame):
         win.title("Details (LanguageTool matches)")
         win.geometry("1200x700")
 
-        ttk.Label(win, text="Each row = one match from LanguageTool.", padding=10).pack(
-            anchor="w"
-        )
+        ttk.Label(win, text="Each row = one match from LanguageTool.", padding=10).pack(anchor="w")
 
         cols = ("slot", "word", "rule", "message", "offset", "length", "repl")
         tree = ttk.Treeview(win, columns=cols, show="headings")
         for c in cols:
             tree.heading(c, text=c)
+
         tree.column("slot", width=50)
         tree.column("word", width=140)
         tree.column("rule", width=220)
@@ -765,6 +580,7 @@ class SentencesTab(ttk.Frame):
         tree.column("offset", width=70)
         tree.column("length", width=70)
         tree.column("repl", width=240)
+
         tree.pack(fill="both", expand=True, padx=10, pady=10)
 
         def add_row(slot_idx: int, word: str, m: dict):
@@ -774,14 +590,8 @@ class SentencesTab(ttk.Frame):
             offset = m.get("offset", "")
             length = m.get("length", "")
             repls = m.get("replacements", []) or []
-            repl_txt = ", ".join(
-                [r.get("value", "") for r in repls[:5] if r.get("value")]
-            )
-            tree.insert(
-                "",
-                "end",
-                values=(slot_idx + 1, word, rule, msg, offset, length, repl_txt),
-            )
+            repl_txt = ", ".join([r.get("value", "") for r in repls[:5] if r.get("value")])
+            tree.insert("", "end", values=(slot_idx + 1, word, rule, msg, offset, length, repl_txt))
 
         for i in range(5):
             word = self.word_vars[i].get()
@@ -790,6 +600,4 @@ class SentencesTab(ttk.Frame):
                 add_row(i, word, m)
 
         if not tree.get_children():
-            ttk.Label(
-                win, text="No matches to show (try Check first).", padding=10
-            ).pack(anchor="w")
+            ttk.Label(win, text="No matches to show (try Check first).", padding=10).pack(anchor="w")
